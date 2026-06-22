@@ -1,0 +1,471 @@
+-- AR-15 Client-Side Script
+-- Convertido para LocalScript
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Debris = game:GetService("Debris")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local mouse = player:GetMouse()
+local camera = workspace.CurrentCamera
+
+-- Tool e partes da arma
+local Tool = script.Parent
+local Grip = Tool:WaitForChild("Grip")
+local FirePart = Tool:WaitForChild("FirePart")
+local Mag = Tool:WaitForChild("Mag")
+local Bolt = Tool:WaitForChild("Bolt")
+local AimPart = Tool:WaitForChild("AimPart")
+
+-- Configurações (copiadas do ClientConfig)
+local Settings = {
+    Ammo = 30,
+    StoredAmmo = 30,
+    MagCount = 30,
+    FireMode = 1, -- Semi
+
+    -- Dano
+    BaseDamage = 39,
+    LimbDamage = 31.5,
+    HeadDamage = 84,
+
+    -- Recoil
+    gunrecoil = -0.2,
+    camrecoil = 0.05,
+    AimGunRecoil = -0.1,
+    AimCamRecoil = 0.02,
+    Kickback = 3.5,
+    AimKickback = 0.15,
+
+    -- Taxa de tiro
+    Firerate = 60/720,
+
+    -- Física da bala
+    BulletPhysics = Vector3.new(0, 55, 0),
+    BulletSpeed = 2000,
+    BulletSpread = 0,
+
+    -- Zoom/Aim
+    AimZoom = 30,
+    ZoomSpeed = 0.23,
+    AimSpeed = 0.23,
+    UnaimSpeed = 0.23,
+    MouseSensitivity = 0.5,
+
+    -- Tracer
+    TracerEnabled = true,
+    TracerTransparency = 0,
+    TracerLightEmission = 1,
+    TracerTextureLength = 0.1,
+    TracerLifetime = 0.02,
+    TracerFaceCamera = true,
+    TracerColor = BrickColor.new("Fire Yellow"),
+
+    -- Keys
+    FireSelectKey = Enum.KeyCode.V,
+    LaserKey = Enum.KeyCode.G,
+    LightKey = Enum.KeyCode.B,
+    InteractKey = Enum.KeyCode.E,
+    AlternateAimKey = Enum.KeyCode.Z,
+    InspectionKey = Enum.KeyCode.H,
+    AttachmentKey = Enum.KeyCode.LeftControl,
+}
+
+-- Variáveis de estado
+local shooting = false
+local recoiling = false
+local aiming = false
+local sprinting = false
+local crouching = false
+local prone = false
+local leaningRight = false
+local leaningLeft = false
+local reloading = false
+local boltBack = false
+
+-- Variáveis de animação/sway
+local swayX = 0
+local swayY = 0
+local walkCycle = 0
+local recoilOffset = CFrame.new()
+local aimOffset = CFrame.new()
+
+-- Tabelas de som
+local soundIds = {
+    Grass = {"1565831468", "1565832329"},
+    Sand = {"1565831129", "1565830611"},
+    Wood = {"1565825075", "1565824613"},
+    Metal = {"1565821941", "1565821634"},
+    Concrete = {"1565756818", "1565756607"},
+    Water = {"1565717027", "1565716705"},
+}
+
+-- Referências de FX
+local FX = Tool:WaitForChild("FX")
+local FlashFX = FX:WaitForChild("FlashFX")
+
+-- Funções utilitárias
+local function Weld(p1, p2, c0)
+    local w = Instance.new("Motor6D", p1)
+    w.Part0 = p1
+    w.Part1 = p2
+    w.Name = p1.Name
+    w.C0 = c0 or p1.CFrame:inverse() * p2.CFrame
+    return w
+end
+
+-- Sistema de mira (Aim)
+local aimConnection
+
+local function updateAim()
+    if aiming and AimPart then
+        local targetPos = mouse.Hit.p
+        local aimCFrame = CFrame.new(AimPart.Position, targetPos)
+        local angles = CFrame.Angles(
+            -math.asin(aimCFrame.LookVector.Y),
+            0,
+            0
+        )
+        Tool.Grip.CFrame = aimCFrame * angles
+    end
+end
+
+-- Sistema de recoil
+local function applyRecoil()
+    if not recoiling then return end
+
+    local recoilAmount = aiming and Settings.AimGunRecoil or Settings.gunrecoil
+    local kickbackAmount = aiming and Settings.AimKickback or Settings.Kickback
+
+    -- Aplica recoil na câmera
+    camera.CFrame = camera.CFrame * CFrame.Angles(math.rad(Settings.camrecoil), 0, 0)
+
+    -- Aplica recoil na arma
+    Tool.Grip.CFrame = Tool.Grip.CFrame * CFrame.new(0, 0, recoilAmount) * CFrame.Angles(-math.rad(kickbackAmount), 0, 0)
+end
+
+-- Sistema de tiro
+local function fireBullet()
+    if Settings.Ammo <= 0 then return end
+
+    Settings.Ammo = Settings.Ammo - 1
+
+    -- Cria bala
+    local bullet = Instance.new("Part")
+    bullet.Name = "Bullet"
+    bullet.Shape = Enum.PartType.Ball
+    bullet.Size = Vector3.new(1, 1, 12)
+    bullet.BrickColor = BrickColor.new("Bright green")
+    bullet.Material = Enum.Material.Neon
+    bullet.CanCollide = false
+    bullet.CFrame = FirePart.CFrame
+    bullet.Parent = workspace
+
+    Debris:AddItem(bullet, 10)
+
+    -- Aplica velocidade
+    local spread = Vector3.new(
+        math.random(-Settings.BulletSpread, Settings.BulletSpread),
+        math.random(-Settings.BulletSpread, Settings.BulletSpread),
+        math.random(-Settings.BulletSpread, Settings.BulletSpread)
+    )
+
+    local direction = (mouse.Hit.p - FirePart.Position).Unit + spread
+    bullet.Velocity = direction * Settings.BulletSpeed
+
+    -- Efeito de flash
+    for _, emitter in pairs(FlashFX:GetChildren()) do
+        if emitter:IsA("ParticleEmitter") then
+            emitter.Enabled = true
+            delay(0.1, function()
+                emitter.Enabled = false
+            end)
+        end
+    end
+
+    -- Som de tiro
+    local fireSound = Instance.new("Sound")
+    fireSound.SoundId = "rbxassetid://341519743"
+    fireSound.Volume = 0.4
+    fireSound.Parent = FirePart
+    fireSound:Play()
+    Debris:AddItem(fireSound, 1)
+
+    -- Aplica recoil
+    applyRecoil()
+end
+
+-- Sistema de reload
+local function reload()
+    if reloading or Settings.Ammo >= Settings.MagCount then return end
+    reloading = true
+
+    -- Animação simplificada
+    local startTime = tick()
+    while tick() - startTime < 2 do -- 2 segundos de reload
+        RunService.RenderStepped:Wait()
+        -- Rotação do personagem
+        local arm = character:FindFirstChild("Right Arm")
+        if arm then
+            arm.CFrame = arm.CFrame * CFrame.Angles(0, math.rad(90), 0)
+        end
+    end
+
+    Settings.Ammo = math.min(Settings.Ammo + Settings.MagCount, Settings.StoredAmmo)
+    reloading = false
+end
+
+-- Sistema de munição (resupply)
+local function resupply()
+    Settings.StoredAmmo = Settings.StoredAmmo - Settings.MagCount
+    Settings.Ammo = Settings.MagCount
+    -- Som de reload
+    local reloadSound = Instance.new("Sound")
+    reloadSound.SoundId = "rbxassetid://1565703226"
+    reloadSound.Parent = Mag
+    reloadSound:Play()
+    Debris:AddItem(reloadSound, 1)
+end
+
+-- Input handling
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+
+    -- Atirar
+    if input.UserInputType == Enum.UserInputType.MouseButton1 and not reloading then
+        if Settings.Ammo > 0 and not shooting then
+            shooting = true
+            fireBullet()
+
+            -- Auto fire
+            if Settings.FireMode == 2 then
+                while UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) 
+                      and Settings.Ammo > 0 do
+                    wait(Settings.Firerate)
+                    fireBullet()
+                end
+            end
+            shooting = false
+        end
+    end
+
+    -- Mirar (hold RMB)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        if not aiming then
+            aiming = true
+            aimConnection = RunService.RenderStepped:Connect(updateAim)
+            -- Ativa laser se existir
+            local laser = Tool:FindFirstChild("LaserLight")
+            if laser then
+                laser.Transparency = 0
+            end
+        end
+    end
+
+    -- Sprint
+    if input.KeyCode == Enum.KeyCode.LeftShift then
+        sprinting = true
+        humanoid.WalkSpeed = Settings.SprintSpeed
+    end
+
+    -- Crouch/Prone
+    if input.KeyCode == Enum.KeyCode.C then
+        if not crouching and not prone then
+            crouching = true
+            humanoid.WalkSpeed = 9
+            -- Animação de crouch
+        elseif crouching and not prone then
+            crouching = false
+            prone = true
+            humanoid.WalkSpeed = 4
+            -- Animação de prone
+        elseif prone then
+            prone = false
+            crouching = false
+            humanoid.WalkSpeed = 16
+        end
+    end
+
+    -- Lean
+    if input.KeyCode == Enum.KeyCode.Q then
+        leaningLeft = not leaningLeft
+        -- Animação de lean
+    end
+
+    if input.KeyCode == Enum.KeyCode.E then
+        leaningRight = not leaningRight
+        -- Animação de lean
+    end
+
+    -- Change fire mode
+    if input.KeyCode == Settings.FireSelectKey then
+        if Settings.FireMode == 1 then
+            Settings.FireMode = 2 -- Auto
+        elseif Settings.FireMode == 2 then
+            Settings.FireMode = 3 -- Burst
+        elseif Settings.FireMode == 3 then
+            Settings.FireMode = 1 -- Semi
+        end
+    end
+
+    -- Toggle laser
+    if input.KeyCode == Settings.LaserKey then
+        local laser = Tool:FindFirstChild("LaserLight")
+        if laser then
+            laser.Transparency = laser.Transparency == 0 and 1 or 0
+        end
+    end
+
+    -- Toggle flashlight
+    if input.KeyCode == Settings.LightKey then
+        local flash = Tool:FindFirstChild("FlashLight")
+        if flash then
+            local light = flash:FindFirstChild("Light")
+            if light then
+                light.Enabled = not light.Enabled
+            end
+        end
+    end
+
+    -- Inspect
+    if input.KeyCode == Settings.InspectionKey then
+        -- Animação de inspeção
+    end
+
+    -- Aim toggle
+    if input.KeyCode == Settings.AlternateAimKey then
+        if not aiming then
+            aiming = true
+            aimConnection = RunService.RenderStepped:Connect(updateAim)
+        else
+            aiming = false
+            if aimConnection then
+                aimConnection:Disconnect()
+                aimConnection = nil
+            end
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    -- Parar de mirar
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        aiming = false
+        if aimConnection then
+            aimConnection:Disconnect()
+            aimConnection = nil
+        end
+        -- Desativa laser
+        local laser = Tool:FindFirstChild("LaserLight")
+        if laser then
+            laser.Transparency = 1
+        end
+    end
+
+    -- Parar sprint
+    if input.KeyCode == Enum.KeyCode.LeftShift then
+        sprinting = false
+        humanoid.WalkSpeed = 16
+    end
+end)
+
+-- Sistema de animação contínua (walk/sway)
+RunService.RenderStepped:Connect(function()
+    -- Sway
+    if not aiming then
+        swayX = math.clamp(swayX + math.random(-0.5, 0.5), -35, 35)
+        swayY = math.clamp(swayY + math.random(-0.5, 0.5), -35, 35)
+
+        local swayCF = CFrame.Angles(0, 0, math.rad(swayX * 0.01)) 
+                         * CFrame.Angles(math.rad(swayY * 0.01), 0, 0)
+
+        Tool.Grip.CFrame = Tool.Grip.CFrame:lerp(Tool.Grip.CFrame * swayCF, 0.1)
+    end
+
+    -- Walk bob
+    if humanoid.MoveDirection.Magnitude > 0 then
+        walkCycle = walkCycle + 0.1
+        local bobOffset = CFrame.new(0, math.sin(walkCycle) * 0.1, 0)
+        Tool.Grip.CFrame = Tool.Grip.CFrame:lerp(Tool.Grip.CFrame * bobOffset, 0.1)
+    end
+end)
+
+-- Sistema de hit detection (Raycast)
+local function onBulletHit(bullet, hitPos, hitNormal, hitPart)
+    if not hitPart then return end
+
+    -- Efeito de impacto
+    local impact = Instance.new("Part")
+    impact.Size = Vector3.new(0.2, 0.2, 0.2)
+    impact.Position = hitPos
+    impact.Anchored = true
+    impact.CanCollide = false
+    impact.Transparency = 1
+    impact.Parent = workspace
+
+    Debris:AddItem(impact, 3)
+
+    -- Partículas de impacto
+    local spark = Instance.new("ParticleEmitter")
+    spark.Color = ColorSequence.new(Color3.new(1, 0.5, 0))
+    spark.Size = NumberSequence.new(0.5, 0)
+    spark.Lifetime = NumberRange.new(0.1, 0.5)
+    spark.Rate = 50
+    spark.Parent = impact
+
+    delay(0.1, function()
+        spark.Enabled = false
+    end)
+
+    -- Dano
+    local humanoid = hitPart.Parent:FindFirstChild("Humanoid") 
+                   or hitPart.Parent.Parent:FindFirstChild("Humanoid")
+
+    if humanoid then
+        local damage = Settings.BaseDamage
+
+        if hitPart.Name == "Head" then
+            damage = Settings.HeadDamage
+        elseif hitPart.Name == "Torso" or hitPart.Name == "HumanoidRootPart" then
+            damage = Settings.BaseDamage
+        else
+            damage = Settings.LimbDamage
+        end
+
+        humanoid:TakeDamage(damage)
+
+        -- Som de hit
+        local hitSound = Instance.new("Sound")
+        hitSound.SoundId = "rbxassetid://287769483"
+        hitSound.Parent = hitPart
+        hitSound:Play()
+        Debris:AddItem(hitSound, 1)
+    end
+end)
+
+-- Conectar eventos do Tool
+Tool.Activated:Connect(function()
+    if Settings.Ammo > 0 and not reloading then
+        fireBullet()
+    end
+end)
+
+Tool.Deactivated:Connect(function()
+    shooting = false
+end)
+
+-- Resupply ao tocar em munição
+local function onTouch(hit)
+    if hit.Name == "Resupply" or hit.Parent.Name == "Resupply" then
+        resupply()
+    end
+end
+
+-- Conectar touch
+if Tool:FindFirstChild("Resupply") then
+    Tool.Resupply.Touched:Connect(onTouch)
+end
