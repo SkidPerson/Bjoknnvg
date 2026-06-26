@@ -15156,7 +15156,7 @@ local function main()
 		btn_codes.BorderSizePixel = 0
 		btn_codes.TextSize = 16
 		btn_codes.TextColor3 = Color3.fromRGB(255, 255, 255)
-		btn_codes.BackgroundColor3 = Color3.fromRGB(0, 171, 255)
+		btn_codes.BackgroundColor3 = Color3.fromRGB(0, 135, 203)
 		btn_codes.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
 		btn_codes.Size = UDim2.new(0, 220, 0, 32)
 		btn_codes.Position = UDim2.new(0, 72, 0, 284)
@@ -15168,7 +15168,7 @@ local function main()
 		btn_bytecode.BorderSizePixel = 0
 		btn_bytecode.TextSize = 16
 		btn_bytecode.TextColor3 = Color3.fromRGB(255, 255, 255)
-		btn_bytecode.BackgroundColor3 = Color3.fromRGB(0, 171, 255)
+		btn_bytecode.BackgroundColor3 = Color3.fromRGB(0, 135, 203)
 		btn_bytecode.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
 		btn_bytecode.Size = UDim2.new(0, 220, 0, 32)
 		btn_bytecode.Position = UDim2.new(0, 72, 0, 326)
@@ -15207,7 +15207,7 @@ local function main()
 		homeButton.Text = "Back To Home"
 		homeButton.Size = UDim2.new(0, 180, 0, 32)
 		homeButton.Position = UDim2.new(0, 176, 0, 370)
-		homeButton.BackgroundColor3 = Color3.fromRGB(0, 171, 255)
+		homeButton.BackgroundColor3 = Color3.fromRGB(0, 135, 203)
 		homeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 		homeButton.TextSize = 15
 		homeButton.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
@@ -15219,7 +15219,7 @@ local function main()
 		autoRedeemButton.Text = "Auto Redeem"
 		autoRedeemButton.Size = UDim2.new(0, 155, 0, 32)
 		autoRedeemButton.Position = UDim2.new(0, 10, 0, 370)
-		autoRedeemButton.BackgroundColor3 = Color3.fromRGB(0, 171, 255)
+		autoRedeemButton.BackgroundColor3 = Color3.fromRGB(0, 135, 203)
 		autoRedeemButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 		autoRedeemButton.TextSize = 15
 		autoRedeemButton.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
