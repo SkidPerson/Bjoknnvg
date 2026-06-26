@@ -15474,10 +15474,12 @@ local function main()
 		local localPlayerName = localPlayer and localPlayer.Name or "Unknown"
 
 		local selectedButton = nil
+		local otherPlayerButtons = {} -- guarda os btns dos outros jogadores
+		local localExpanded = false   -- estado do accordion
 
 		-- Cria um botão de jogador no estilo do LMG2L
 		-- isLocal = true  => mostra ">" (expansível, é o jogador local)
-		-- isLocal = false => mostra sem ícone de expand (outros jogadores)
+		-- isLocal = false => outros jogadores (ocultos até expandir)
 		local function criarBotaoJogador(nome, isLocal, yPos)
 			-- Botão principal (container clicável)
 			local btn = Instance.new("TextButton", scrollFrame)
@@ -15489,8 +15491,12 @@ local function main()
 			btn.Position = UDim2.new(0, 0, 0, yPos)
 			btn.Text = ""
 			btn.AutoButtonColor = false
+			-- Outros jogadores começam ocultos
+			if not isLocal then
+				btn.Visible = false
+			end
 
-			-- Ícone ">" ou "v" para o jogador local / vazio para outros
+			-- Ícone ">" para o jogador local / vazio para outros
 			local icon = Instance.new("TextButton", btn)
 			icon.Name = "Icon"
 			icon.BorderSizePixel = 0
@@ -15516,9 +15522,7 @@ local function main()
 			label.TextXAlignment = Enum.TextXAlignment.Left
 			label.TextSize = 9
 
-			local expanded = false
-
-			-- Clique: seleção azul + toggle ícone no jogador local
+			-- Clique: seleção azul + toggle accordion no jogador local
 			local function onClicked()
 				-- Desselecionar anterior
 				if selectedButton and selectedButton ~= btn then
@@ -15531,10 +15535,13 @@ local function main()
 				btn.BackgroundTransparency = 0
 				btn.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
 
-				-- Toggle ícone do jogador local
+				-- Toggle accordion: mostra/oculta outros jogadores
 				if isLocal then
-					expanded = not expanded
-					icon.Text = expanded and "v" or ">"
+					localExpanded = not localExpanded
+					icon.Text = localExpanded and "v" or ">"
+					for _, otherBtn in pairs(otherPlayerButtons) do
+						otherBtn.Visible = localExpanded
+					end
 				end
 			end
 
@@ -15551,22 +15558,27 @@ local function main()
 				child:Destroy()
 			end
 			selectedButton = nil
+			otherPlayerButtons = {}
+			localExpanded = false
 
 			local yPos = 2 -- pequena margem no topo
 
-			-- 1) Jogador local (com ícone expansível ">" igual ao LMG2L)
+			-- 1) Jogador local (com ícone expansível ">")
 			criarBotaoJogador(localPlayerName, true, yPos)
 			yPos = yPos + 18
 
-			-- 2) Todos os outros jogadores (mesmo estilo, empilhados um embaixo do outro)
+			-- 2) Todos os outros jogadores (ocultos inicialmente)
 			for _, player in pairs(Players:GetPlayers()) do
 				if player ~= localPlayer then
-					criarBotaoJogador(player.Name, false, yPos)
+					local otherBtn = criarBotaoJogador(player.Name, false, yPos)
+					table.insert(otherPlayerButtons, otherBtn)
 					yPos = yPos + 18
 				end
 			end
 
 			scrollFrame.CanvasSize = UDim2.new(0, 0, 0, yPos + 8)
+		end
+
 		end
 
 		-- Monta lista inicial
